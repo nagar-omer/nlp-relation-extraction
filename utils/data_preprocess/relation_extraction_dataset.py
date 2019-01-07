@@ -4,7 +4,7 @@ import en_core_web_sm
 from torch.utils.data import Dataset
 import numpy as np
 from utils.data_preprocess.vocabulary import CharVocab, CostumeVocabulary, VocabularyBase
-from utils.params import NER_OTHER, PER, ORG, UNKNOWN, PAD
+from utils.params import NER_OTHER, PER, ORG, UNKNOWN, PAD, UPPER
 
 """
 This class will get sentences + labels as dict.
@@ -45,7 +45,7 @@ class RelationExtractionDataset(Dataset):
         self._chr_vocab = CharVocab(dim=2) if chr_vocab is None else chr_vocab
         self._pos_vocab = CostumeVocabulary(list(self._nlp.vocab.morphology.tag_map.keys()), dim=2) \
             if pos_vocab is None else chr_vocab
-        self._ner_vocab = CostumeVocabulary([NER_OTHER, PER, ORG], dim=2) if ner_vocab is None else chr_vocab
+        self._ner_vocab = CostumeVocabulary([NER_OTHER, PER, ORG, UPPER], dim=2) if ner_vocab is None else chr_vocab
 
         # process data
         self._labels = labels
@@ -88,16 +88,34 @@ class RelationExtractionDataset(Dataset):
         else:                   # give_up -> unknown
             return self._word_vocab.translate(UNKNOWN)
 
-    @staticmethod
-    def _np_chunk_combination(sent):
-        person_np = []
-        org_np = []
-        for np in sent.noun_chunks:
-            # check if np-chunk is person or org
-            if np[-1].ent_type_ == PER:
-                person_np.append(np)
-            if np[-1].ent_type_ == ORG:
-                org_np.append(np)
+    def get_ner_score(self, np_chunk):
+        scores = np.zeros((len(np_chunk), self._nlp.entity.model.nr_class))
+        with self._nlp.entity.step_through(np_chunk) as state:
+            while not state.is_final:
+                action = state.predict()
+                next_tokens = state.queue
+                scores[next_tokens[0].i] = state.scores
+                state.transition(action)
+        return scores
+
+    def _np_chunk_combination(self, sent):
+        person_np, org_np, curr_per, curr_org = [], [], [], []
+        state = sent[0].ent_type_
+        for i, word in enumerate(sent):
+            word_ner = word.ent_type_
+            if state != word_ner:
+                if state == PER:
+                    person_np.append(sent[curr_per[0]:curr_per[-1] + 1])
+                    curr_per = []
+                elif state == ORG:
+                    org_np.append(sent[curr_org[0]:curr_org[-1] + 1])
+                    curr_org = []
+                state = word_ner
+            if state == PER:
+                curr_per.append(i)
+            elif state == ORG:
+                curr_org.append(i)
+
         # loop on all options person-org
         for per in person_np:
             for org in org_np:
@@ -124,7 +142,7 @@ class RelationExtractionDataset(Dataset):
             # loop over list of [ .. (per, org, org_root) .. ]
             for sent_per, sent_org, sent_org_root in self._labels.get(sent_id, []):
                 # check similarity between PERSON and ORGANIZATION-ROOT
-                if per.text == sent_per and org_root == sent_org_root:
+                if self._get_np_root(per.text) == self._get_np_root(sent_per) and org_root == sent_org_root:
                     label = 1
                     break
         return label
@@ -149,7 +167,8 @@ class RelationExtractionDataset(Dataset):
                 pos_embed.append(self._pos_vocab.translate(word.tag_))             # pos embed
                 word_ent = word.ent_type_                                          # ner embed
                 ner_embed.append(self._ner_vocab.translate(word_ent) if word_ent in self._per_org
-                                 else self._ner_vocab.translate(NER_OTHER))
+                                 else (self._ner_vocab.translate(NER_OTHER) if word.text[0].isupper() else
+                                       self._ner_vocab.translate(NER_OTHER)))
 
             # save representation by sentence-ID
             sent_rep[sent_id] = (words, chr_embed, word_embed, pos_embed, ner_embed, tree_parent)
@@ -158,6 +177,16 @@ class RelationExtractionDataset(Dataset):
             for per, org in self._np_chunk_combination(sent):
                 data.append((per, org, sent_id, self._get_label(sent_id, per, org)))
         return sent_rep, data
+
+    @property
+    def semantic_samples(self):
+        for i in range(len(self._samples)):
+            per, org, sent_id, label = self._samples[i]
+            words, chr_embed, word_embed, pos_embed, ner_embed, tree_parent = self._sentences_rep[sent_id]
+            tree_parent = [val + i for i, val in enumerate(tree_parent)]
+            per_idx = [w.i for w in per]
+            org_idx = [w.i for w in org]
+            yield sent_id, (per, per_idx), (org, org_idx), (words, tree_parent), label
 
     def __getitem__(self, index):
         per, org, sent_id, label = self._samples[index]

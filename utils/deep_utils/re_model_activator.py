@@ -239,9 +239,9 @@ class REActivator:
 
                 output = self._model(per, org, sent)
                 # calculate accuracy and loss
-                for i, pred in enumerate(torch.round(output)):
+                for i, pred in enumerate(output):
                     all_pred.append([sent_id[i], " ".join(per_words[i]), " ".join(org_words[i]), " ".join(sent_words[i])
-                                    , int(pred.item())])
+                                    , pred.item()])
         return all_pred
 
 

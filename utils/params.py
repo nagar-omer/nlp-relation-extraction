@@ -8,6 +8,7 @@ RELATION = "Work_For"
 
 PER = "PERSON"
 ORG = "ORG"
+UPPER = "UPPER"
 NER_OTHER = "O"
 
 PRE_TRAINED_SRC = os.path.join("data", "GloVe", "glove.6B.50d.txt")
@@ -27,7 +28,7 @@ class ChrLevelLSTMParams:
         self.EMBED_vocab_dim = chr_vocab_dim
         self.LSTM_hidden_dim = 50
         self.LSTM_layers = 3
-        self.LSTM_dropout = 0.1
+        self.LSTM_dropout = 0.3
         self.OUT_DIM = self.LSTM_hidden_dim
 
 
@@ -45,8 +46,8 @@ class EncoderDecoderParams:
         self.EMBED_CHR_dim = chr_rep_dim                # number of filters at chr level model
         self.LSTM_layers = 1
         self.LSTM_hidden_dim = 200
-        self.LSTM_dropout_0 = 0.1
-        self.LSTM_dropout_1 = 0.1
+        self.LSTM_dropout_0 = 0.15
+        self.LSTM_dropout_1 = 0.15
         self.LSTM_dropout_2 = 0
         self.GPU = gpu
         self.OUT_DIM = self.LSTM_hidden_dim * 4
@@ -80,5 +81,5 @@ class REActivatorParams:
         self.LOSS = binary_cross_entropy
         self.BATCH_SIZE = 32
         self.GPU = True
-        self.EPOCHS = 100
+        self.EPOCHS = 30
         self.VALIDATION_RATE = 10

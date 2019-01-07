@@ -1,4 +1,7 @@
 import sys
+
+from utils.semantic_model.semantic_re_estimator import SemanticEstimator
+
 sys.path.insert(0, "..")
 from bokeh.plotting import figure, save
 from bokeh.resources import Resources
@@ -26,7 +29,7 @@ def get_x_y_axis(curve):
 def _plot_loss_and_acc(train_line, dev_line, header, file_name, color_train='red', color_dev='orange', legend=""):
     if "fig" not in os.listdir(os.path.join("..")):
         os.mkdir(os.path.join("..", "fig"))
-    p = figure(plot_width=600, plot_height=250, title="SNLI - Train/Dev " + header,
+    p = figure(plot_width=600, plot_height=250, title="RE - Train/Dev " + header,
                x_axis_label="epochs", y_axis_label=header)
 
     x1, y1 = get_x_y_axis(train_line)
@@ -79,6 +82,8 @@ if __name__ == "__main__":
     re_activator = REActivator(re_model, activator_param, ds_train, ds_dev, train_annotation=labels_train,
                                dev_annotation=labels_dev)
     re_activator.train()
+    semantic_model = SemanticEstimator(ds_train)
+    semantic_model.suspend_nlp()
 
     # save results and model
     _plot_loss_and_acc(re_activator.loss_vec_train, re_activator.loss_vec_dev,
@@ -92,8 +97,8 @@ if __name__ == "__main__":
                        legend="recall")
     _plot_loss_and_acc(re_activator.f1_vec_train, re_activator.f1_vec_dev,
                        "F1 Train/Dev", model_name + "_f1_line", color_train='green', color_dev='blue', legend="F1")
-    pickle.dump(re_activator.best_model, open(os.path.join("..", "pkl", "trained_models", model_name + ".re_model"),
-                                              "wb"))
+    pickle.dump((re_activator.best_model, glove, semantic_model),
+                open(os.path.join("..", "pkl", "trained_models", model_name + ".re_model"), "wb"))
 
 
 
